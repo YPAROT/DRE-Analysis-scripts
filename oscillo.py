@@ -162,7 +162,7 @@ class Oscilloscope:
         else:
             fig, ax1 = plt.subplots(min(self.NbWaveforms(),len(index_list)),1,figsize=(15, 15),squeeze=False)
         legend=[]
-        for index in index_list:
+        for i,index in enumerate(index_list):
             if index>self.NbWaveforms()-1:
                 continue
             else:
@@ -184,10 +184,10 @@ class Oscilloscope:
                     ax1.set_ylabel('Tension ( V / $\sqrt{Hz}$ )')
                     ax1.set_xlabel('Fréquence ( MHz )')
                 else:
-                    ax1[index,0].semilogy(freq/1e6,np.sqrt(Power))
-                    ax1[index,0].set_title('DSP: '+self._Labels[index])
-                    ax1[index,0].set_ylabel('Tension ( V / $\sqrt{Hz}$ )')
-                    ax1[index,0].set_xlabel('Fréquence ( MHz )')
+                    ax1[i,0].semilogy(freq/1e6,np.sqrt(Power))
+                    ax1[i,0].set_title('DSP: '+self._Labels[index])
+                    ax1[i,0].set_ylabel('Tension ( V / $\sqrt{Hz}$ )')
+                    ax1[i,0].set_xlabel('Fréquence ( MHz )')
                     
                 legend.append(self._Labels[index])
         
