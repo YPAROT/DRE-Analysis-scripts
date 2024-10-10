@@ -201,7 +201,7 @@ class Oscilloscope:
         self.PlotWaveFormDSP([i for i in range(self.NbWaveforms())],shared)
         
     @staticmethod
-    def plot_high_res_csv():
+    def plot_high_res_csv(**kwargs):
         #Choix fichier
         root=Tk()
         root.lift()
@@ -227,14 +227,40 @@ class Oscilloscope:
         data = np.array(data)
     
         #reshape en image
-        rows = int(param['Total Rows'])
-        cols = int(len(data)/rows)
-        data = data.reshape((rows,cols))
+        nb_rows = int(param['Total Rows'])
+        nb_cols = int(param['Total Columns'])
+        data = data.reshape((nb_rows,nb_cols))
     
-        fig, ax = plt.subplots(figsize=(15, 15))
-        ax.imshow(np.log10(data+1),cmap=cm.YlOrRd) #log pour augmenter le contraste avec +1 pour éviter le inf
+        #Affichage des axes
+        nb_ticks=10
+        t_start = float(param['Left Column'])
+        t_stop = t_start + float(param['Sample Interval']) * nb_cols
+        x_ticks_labels = [f"{val:.2e}" for val in np.linspace(t_start,t_stop,nb_ticks)]
+        x_ticks_locs = np.linspace(0,nb_cols-1,nb_ticks)
+        
+        y_info = None
+        if kwargs:
+            try:
+                y_info=kwargs['y_info']
+            except KeyError:
+                print('L\'argument donné n\'existe pas')
+
+        if y_info:
+            y_ticks_labels = [f"{val:.2e}" for val in np.linspace(y_info[0],y_info[0]+y_info[1]*y_info[2],nb_ticks)]
+        else:
+            y_ticks_labels = [f"{val:.2e}" for val in np.linspace(0,nb_rows-1,nb_ticks)]
+        y_ticks_locs = np.linspace(nb_rows-1,0,nb_ticks)
+    
+        #plot image
+        y_im_size = 10
+        fig, ax = plt.subplots(figsize=(int(y_im_size*nb_cols/nb_rows), y_im_size))
+        ax.imshow(np.log10(data+1),cmap=cm.inferno) #log pour augmenter le contraste avec +1 pour éviter le inf
+        plt.sca(ax)
+        plt.xticks(x_ticks_locs,x_ticks_labels)
+        plt.yticks(y_ticks_locs,y_ticks_labels)
+        
 
         return data
  
     
-data_test = Oscilloscope.plot_high_res_csv()
+data_test = Oscilloscope.plot_high_res_csv(y_info=[0,10,0.25])
