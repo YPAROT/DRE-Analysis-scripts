@@ -261,6 +261,3 @@ class Oscilloscope:
         
 
         return data
- 
-    
-data_test = Oscilloscope.plot_high_res_csv(y_info=[0,10,0.25])
