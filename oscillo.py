@@ -11,6 +11,7 @@ import csv
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 from matplotlib import pyplot as plt
+import matplotlib.cm as cm
 import scipy.signal as signal
 import numpy as np
 #import statistics
@@ -198,3 +199,42 @@ class Oscilloscope:
     
     def PlotAllDSP(self,shared=True):
         self.PlotWaveFormDSP([i for i in range(self.NbWaveforms())],shared)
+        
+    @staticmethod
+    def plot_high_res_csv():
+        #Choix fichier
+        root=Tk()
+        root.lift()
+        root.withdraw()
+        filename = askopenfilename(filetypes=[('fichier Oscilloscope high res','*.csv')],parent=root)
+        
+        #lecture
+        with open(filename, newline='') as csvfile:
+            
+            hr_file = csv.reader(csvfile, delimiter=',')               
+
+            param = dict()
+            data = []
+            for i,csvline in enumerate(hr_file):
+                if i < 9:
+                    param[csvline[0]] = csvline[1]
+                else:
+                    for pxl_value in csvline:
+                        if pxl_value != '':
+                            data.append(int(pxl_value)) 
+                            
+        #conversion vers numpy array
+        data = np.array(data)
+    
+        #reshape en image
+        rows = int(param['Total Rows'])
+        cols = int(len(data)/rows)
+        data = data.reshape((rows,cols))
+    
+        fig, ax = plt.subplots(figsize=(15, 15))
+        ax.imshow(np.log10(data+1),cmap=cm.YlOrRd) #log pour augmenter le contraste avec +1 pour éviter le inf
+
+        return data
+ 
+    
+data_test = Oscilloscope.plot_high_res_csv()
