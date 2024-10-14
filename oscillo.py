@@ -13,6 +13,7 @@ from tkinter.filedialog import askopenfilename
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
 import scipy.signal as signal
+from scipy.optimize import curve_fit
 import numpy as np
 #import statistics
 
@@ -245,7 +246,7 @@ class Oscilloscope:
             except KeyError:
                 print('L\'argument donné n\'existe pas')
 
-        if y_info:
+        if y_info and len(y_info)==3:
             y_ticks_labels = [f"{val:.2e}" for val in np.linspace(y_info[0],y_info[0]+y_info[1]*y_info[2],nb_ticks)]
         else:
             y_ticks_labels = [f"{val:.2e}" for val in np.linspace(0,nb_rows-1,nb_ticks)]
@@ -260,4 +261,87 @@ class Oscilloscope:
         plt.yticks(y_ticks_locs,y_ticks_labels)
         
 
-        return data
+        return
+
+    @staticmethod
+    def plot_hist_measurement(fit=False,fittype='gaussian',**kwargs):
+         
+        #Choix fichier
+        root=Tk()
+        root.lift()
+        root.withdraw()
+        filename = askopenfilename(filetypes=[('fichier Oscilloscope measurement histogramme','*.csv')],parent=root)
+        
+        #lecture
+        x_data = []
+        y_data = []
+        with open(filename, newline='') as csvfile:           
+            histo_file = csv.reader(csvfile, delimiter=',')               
+            for i,csvline in enumerate(histo_file):
+                if i < 1:
+                    next
+                else:
+                    x_data.append(float(csvline[0]))
+                    y_data.append(int(csvline[1]))
+  
+        #plot histogram
+        dx_min = min([x_data[i]-x_data[i-1] for i in range(1,len(x_data))])
+        fig, ax = plt.subplots(figsize=(15,15))
+        ax.bar(x_data,y_data,width=dx_min*0.8,label='Data')
+        ax.set_title('Histogram')
+        ax.set_ylabel('Hits')
+        ax.set_xlabel('Time / freq / ...')             
+        
+        #add filt if needed
+        txt_cr='\n'
+        if fit:
+            if fittype == 'gaussian':
+                if kwargs:
+                    params,cov = fit_gaussian(x_data, y_data,guess = kwargs['guess'])
+                else:
+                    params,cov = fit_gaussian(x_data, y_data)
+                y_fit = gaussian(x_data,*params)
+                sigma=np.sqrt(np.diag(cov))
+                print(f'µ1 = {params[0]} -- dev = {sigma[0]}{txt_cr}sigma1 = {params[1]} -- dev = {sigma[1]}{txt_cr}A1 = {params[2]} -- dev = {sigma[2]}{txt_cr}')
+            elif fittype == 'bimodal_gaussian':
+                if kwargs:
+                    params,cov = fit_bimodal_gaussian(x_data, y_data,guess = kwargs['guess'])
+                else:
+                    params,cov = fit_bimodal_gaussian(x_data, y_data)
+                y_fit = bimodal_gaussian(x_data,*params)
+                sigma=np.sqrt(np.diag(cov))
+                print(f'µ1 = {params[0]} -- dev = {sigma[0]}{txt_cr}sigma1 = {params[1]} -- dev = {sigma[1]}{txt_cr}A1 = {params[2]} -- dev = {sigma[2]}{txt_cr}µ2 = {params[3]} -- dev = {sigma[3]}{txt_cr}sigma2 = {params[4]} -- dev = {sigma[4]}{txt_cr}A2 = {params[5]} -- dev = {sigma[5]}{txt_cr}')
+            
+            if y_fit.any:
+                ax.plot(x_data,y_fit,'--r',label='Fit')
+                
+        
+        #add legend
+        ax.legend()
+        
+
+
+                    
+        return
+    
+def gaussian(x,mu,sigma,A):
+    #return A*1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-mu)**2/(2*sigma**2))
+    return A*np.exp(-(x-mu)**2/(2*sigma**2))
+    
+def bimodal_gaussian(x,mu1,sigma1,A1,mu2,sigma2,A2):
+    return gaussian(x,mu1,sigma1,A1)+gaussian(x,mu2,sigma2,A2)
+
+def fit_gaussian(xdata,ydata,**kwargs):
+    if kwargs:
+        params,cov = curve_fit(gaussian, xdata, ydata,kwargs['guess'])
+    else:
+        params,cov = curve_fit(gaussian, xdata, ydata)
+    return params,cov
+
+def fit_bimodal_gaussian(xdata,ydata,**kwargs):
+    if kwargs:
+        params,cov = curve_fit(bimodal_gaussian, xdata, ydata,kwargs['guess'])
+    else:
+        params,cov = curve_fit(bimodal_gaussian, xdata, ydata)
+    return params,cov
+    

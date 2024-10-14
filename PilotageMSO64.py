@@ -9,10 +9,16 @@ Created on Mon Sep  9 12:02:44 2024
 from enum import Enum
 
 class Z_IN(Enum):
+    """
+    Enumération contenant les différentes impédances d'entrées possibles pour l'oscilloscope
+    """
     Z_1MEG = 1e6
     Z_50 = 50
     
 class ACQ_MODE(Enum):
+    """
+    Enumération contenant les différents modes d'acquisition de l'oscilloscope
+    """
     SAMPLE = "SAMple"
     PEAKDETECT ="PEAKdetect"
     HIRES = "HIRes"
@@ -20,6 +26,9 @@ class ACQ_MODE(Enum):
     ENVELOPE = "ENVelope"
     
 class EXTREM_VAL(Enum):
+    """
+    Enumération contenant les valeurs extrêmes de certains paramètres de l'oscilloscope (Bandwidth, divisions horizontales etc...)
+    """
     MAX_BW = 1e9 #Hz
     MIN_BW = 20e6 #Hz
     MAX_SCALE = 1 #V/div
@@ -29,6 +38,9 @@ class EXTREM_VAL(Enum):
     NBCHAN  = 4
     
 class MEAS_TYPE(Enum):
+    """
+    Enumération des différentes mesures réalisables par l'oscilloscope'
+    """
     ACCOMMONMODE='ACCOMMONMODE'
     ACPRACRMS='ACPRACRMS'
     AMPLITUDE='AMPLITUDE'
@@ -159,7 +171,12 @@ class MEAS_TYPE(Enum):
 import socket
 
 class OscClient:
-    
+    """
+    Client permettant de se connecter à l'oscilloscope via TCP/IP
+    OscClient(IPadress,Port)
+    IPadress: adresse IP au format X.X.X.X de type str
+    Port: n° de port de type int
+    """    
     def __init__(self,IPaddress="10.120.1.86",Port=4000):      
         self._IPaddress = ""
         self._Port = 0
@@ -172,10 +189,18 @@ class OscClient:
 #getters et setters        
     @property
     def IPaddress(self):
+        """
+        Retourne l'adresse IP réglée (type str)'
+        """
         return self._IPaddress
     
     @IPaddress.setter
     def IPaddress(self,IPaddress):
+        """
+        Règle l'adresse IP de l'oscilloscope
+        IPaddress(IPaddress)
+        IPadress: adresse IP au format X.X.X.X de type str
+        """
         if not isinstance(IPaddress, str):
             print('Adresse IP invalide: n\'est pas un str')
             return
@@ -184,10 +209,18 @@ class OscClient:
     
     @property
     def Port(self):
+        """
+        Retourne le port réglé (type int)'
+        """
         return self._Port
     
     @Port.setter
     def Port(self,Port):
+        """
+        Règle le port de l'oscilloscope
+        Port(Port)
+        Port: n° de port de type int
+        """
         if not isinstance(Port, int):
             print('Port invalide: n\'est pas un int')
             return
@@ -195,10 +228,17 @@ class OscClient:
         
     @property
     def Connection(self):
+        """
+        Renvoi le socket (type socket.socket)
+        """
         return self._Socket
     
     @property
     def BufferLength(self):
+        """
+        Renvoi la taille du buffer de lecture réglé
+
+        """
         return self._BufferLength
     
     @BufferLength.setter
@@ -426,7 +466,7 @@ class OscClient:
         
         #Réglage de l'oscilloscope sur la bande max, en Highres pour avoir les 12 bits et Scale max
         self.SetChannelState(Channel,True)
-        self.SetAcqMode(ACQ_MODE.HIRES)
+        self.SetAcqMode(ACQ_MODE.HIRES.value)
         self.SetBandwidth(Channel,BW=EXTREM_VAL.MAX_BW.value)
         self.SetScale(Channel,EXTREM_VAL.MAX_SCALE.value)
         self.SetPosition(Channel,0)
@@ -435,9 +475,8 @@ class OscClient:
         old_SR = self.GetSampleRate()
         old_RL = self.GetRecordLength()
         
-        #mesure sur une bande de fs durant 1s
-        fs=100e6
-        self.SetSampleRate(2*fs)
+        #mesure sur 1s
+        self.SetSampleRate(2*EXTREM_VAL.MAX_BW.value)
         SR_set =self.GetSampleRate()
         self.SetRecordLength(1/(SR_set))
         
