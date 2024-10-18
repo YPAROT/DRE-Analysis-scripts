@@ -219,7 +219,7 @@ class DACAnalyser:
             DNL_temp = self._ProdScalaireList([ord(c)-ord('0') for c in Table_binaire[i-1]],DNL_poids)
             DNL_totale.append(DNL_temp)
         
-        return [0]+DNL_totale
+        return [0]+DNL_totale,DNL_poids
         
         
     def _ProdScalaireList(self,list1,list2):

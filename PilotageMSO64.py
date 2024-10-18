@@ -42,7 +42,7 @@ class MEAS_TYPE(Enum):
     Enumération des différentes mesures réalisables par l'oscilloscope'
     """
     ACCOMMONMODE='ACCOMMONMODE'
-    ACPRACRMS='ACPRACRMS'
+    ACRMS='ACRMS'
     AMPLITUDE='AMPLITUDE'
     AREA='AREA'
     BASE='BASE'
@@ -272,19 +272,25 @@ class OscClient:
         self._Socket.close()
         
     def Command(self,command):
-        return self._Socket.send(f'{command}\n'.encode())
+        return self._Socket.send(f'{command}\n'.encode('utf-8'))
         
     def Query(self,Query):
-        self._Socket.send(f'{Query}\n'.encode())
+        self._Socket.send(f'{Query}\n'.encode('utf-8'))
         data = self._Socket.recv(self._BufferLength) #A tuner en fonction de la datasheet oscillo
-        return data.decode()
+        return data.decode('utf-8')
 
         
     def ClearOutputQueue(self):
         self.Command("DCL\n") #Device Clear Function (Pas utile car l'oscillo fait un clear à chaque requête/commande)
+        
 
         
 #Commandes avancées classiques
+
+    def WaitNotBusy(self):
+        busy = 1
+        while busy == 1:
+            busy = int(self.Query("BUSY?").strip())
 
 #Acquisition
 
@@ -292,7 +298,7 @@ class OscClient:
         self.Command(f"ACQuire:MODe {Mode.value}")
         
     def GetAcqMode(self):
-        return self.Query("ACQuire:MODe")
+        return self.Query("ACQuire:MODe?")
     
     def RunAcq(self):
         self.Command("ACQuire:STATE RUN")
@@ -322,7 +328,12 @@ class OscClient:
             mode="MANual"
         else:
             mode="AUTO"
+            
         self.Command(f"HORizontal:MODe {mode}")
+        
+    def GetHorizontalMode(self):
+        data = self.Query("HORizontal:MODe?")
+        return data        
 
     def AdjustRLWhenSRMove(self,status=False):
         if status:
@@ -359,12 +370,64 @@ class OscClient:
         data = self.Query(f"CH{Channel}:Scale?")
         return float(data.strip())
     
+    def GetMinScale(self,Channel=1):
+        offset = self.GetOffset(Channel)
+        input_Z = self.GetInputZ(Channel)
+        
+        if input_Z == 50.0:
+            if offset > 1:
+                return 100e-3
+            else:
+                return 1e-3
+        else:
+            if offset > 10:
+                return 1
+            elif offset > 1:
+                return 64e-3
+            else:
+                return 500e-6
+    
     def SetPosition(self,Channel=1,Position=0.0): #Position est en nombre de divisions
         self.Command(f"CH{Channel}:POSition {Position}")
         
     def GetPosition(self,Channel=1):
         data = self.Query(f"CH{Channel}:POSition?")
         return float(data.strip())
+    
+    def SetOffset(self,Channel=1,Offset=0.0): #Offset en V
+        self.Command(f"CH{Channel}:OFFSet {Offset}")
+        
+    def GetOffset(self,Channel=1):
+        data = self.Query(f"CH{Channel}:OFFSet?")
+        return float(data.strip())
+    
+    def GetMaxOffset(self,Channel=1):
+        scale = self.GetScale(Channel)
+        input_Z = self.GetInputZ(Channel)
+        
+        if input_Z == 50.0:
+            if scale < 100e-3:
+                return 1
+            else:
+                return 10
+        else: # Haute impédance
+            if scale < 64e-3:
+                return 1
+            elif scale < 1:
+                return 10
+            else:
+                return 100
+            
+    def GetOffsetAccuracy(self,Channel=1):
+        scale = self.GetScale(Channel)
+        offset = self.GetOffset(Channel)
+        position = self.GetPosition(Channel)*scale
+        
+        return 0.005*abs(offset-position) + self.GetDCBalance(Channel)
+    
+    def GetDCBalance(self,Channel=1):
+        return 0 # A coder en fonction de la table tektronix / Il faudrait peut-être arranger ça dans un fichier xml attaché à l'équipement
+        
         
 #Channel
 
@@ -462,111 +525,36 @@ class OscClient:
 
 #Autoscale
 
-    def VerticalAutoScale(self,Channel=1):
+    
+    def VerticalAutoScale(self):
+        #Statut des paramètres autoset
+        old_acq_autoset = self.Query("AUTOSet:ACQuisition:ENAble?")
+        old_hr_autoset = self.Query("AUTOSet:HORizontal:ENAble?")
+        old_trg_autoset = self.Query("AUTOSet:TRIGger:ENAble?")
+        old_vt_autoset = self.Query("AUTOSet:VERTical:ENAble?")
+     
+        #Disable de tout sauf l'échelle verticale pour l'autoset
+        self.Command("AUTOSet:ACQuisition:ENAble OFF")
+        self.Command("AUTOSet:HORizontal:ENAble OFF")
+        self.Command("AUTOSet:TRIGger:ENAble OFF")
+        self.Command("AUTOSet:VERTical:ENAble ON")
         
-        #Réglage de l'oscilloscope sur la bande max, en Highres pour avoir les 12 bits et Scale max
-        self.SetChannelState(Channel,True)
-        self.SetAcqMode(ACQ_MODE.HIRES.value)
-        self.SetBandwidth(Channel,BW=EXTREM_VAL.MAX_BW.value)
-        self.SetScale(Channel,EXTREM_VAL.MAX_SCALE.value)
-        self.SetPosition(Channel,0)
+        #Autoset
+        self.Command("AUTOSet EXECute")
         
-        #Sauvegarde des paramètres
-        old_SR = self.GetSampleRate()
-        old_RL = self.GetRecordLength()
+        print("Autoset Vertical en cours")
         
-        #mesure sur 1s
-        self.SetSampleRate(2*EXTREM_VAL.MAX_BW.value)
-        SR_set =self.GetSampleRate()
-        self.SetRecordLength(1/(SR_set))
+        #Attente Oscilloscope
+        self.WaitNotBusy()
         
-        #Ajout de la mesure
-        last_meas_index = int((self.GetMeasurementsList()[-1].strip())[-1])
-        self.AddNewMeasurementAtIndex(Channel,last_meas_index+1,MEAS_TYPE.MAXIMUM)
-        self.AddNewMeasurementAtIndex(Channel,last_meas_index+2,MEAS_TYPE.MINIMUM)
+        print("Autoset Vertical terminé")
         
+        #Retour aux paramètres originaux
+        self.Command(f"AUTOSet:ACQuisition:ENAble {old_acq_autoset}")
+        self.Command(f"AUTOSet:HORizontal:ENAble {old_hr_autoset}")
+        self.Command(f"AUTOSet:TRIGger:ENAble {old_trg_autoset}")
+        self.Command(f"AUTOSet:VERTical:ENAble {old_vt_autoset}")
         
-        
-        print("Attente d'une acquisition pour le clipping et pre-scaling")
-        self.WaitForAnAcquisition()
-        
-        #Si il y a du clipping on ne peut rien faire
-        if self.IsClipping(Channel):
-            print("Le signal en entrée est trop fort")
-            return
-                 
-        #Pré-réglage
-        
-        #Recupération mesure
-        max_val = self.GetMeasurementMeanValue(last_meas_index+1)
-        min_val = self.GetMeasurementMeanValue(last_meas_index+2)
-        
-        
-        amplitude = max_val - min_val
-        offset = (max_val + min_val)/2
-        
-        if amplitude == 0:
-            print("Amplitude mesuré égale à zéro")
-            self.SetScale(Channel,1e-3)
-            self.SetPosition(Channel,-offset/1e-3)
-            return
-        
-        scale = 2.5 * amplitude/EXTREM_VAL.VDIV.value #on prend une marge pour avoir 40% de l'ecran remplit
-        self.SetScale(Channel,scale)
-        scale = self.GetScale()
-        
-        position = -offset/scale
-        
-        self.SetPosition(Channel,position)
-
-        
-        #On remet les paramètres d'avant pré-réglage
-        self.SetSampleRate(old_SR)
-        self.SetRecordLength(old_RL)
-        
-        
-        #on fait le réglage fin
-        
-        #Attente
-        print("Attente d'une acquisition pour scaling")
-        self.WaitForAnAcquisition()
-        
-        #Recupération mesure
-        max_val = self.GetMeasurementMeanValue(last_meas_index+1)
-        min_val = self.GetMeasurementMeanValue(last_meas_index+2)
-        
-        
-        #delete mesure
-        self.DeleteMeasurement(last_meas_index+1)
-        self.DeleteMeasurement(last_meas_index+2)
-        
-        amplitude = max_val - min_val
-        offset = (max_val + min_val)/2
-        
-        print(f"Amplitude: {amplitude}")
-        print(f"Offset: {offset}")
-        
-        if amplitude == 0:
-            print("Amplitude mesuré égale à zéro")
-            self.SetScale(Channel,1e-3)
-            self.SetPosition(Channel,-offset/1e-3)
-            return
-        
-        scale = 1.1 * amplitude/EXTREM_VAL.VDIV.value #on prend une marge pour avoir 90% de l'écran remplit
-        
-        self.SetScale(Channel,scale)
-        scale = self.GetScale()
-        
-        position = -offset/scale
-        
-        print(f"Scale: {scale}")
-        print(f"Position: {position} division")
- 
-        self.SetScale(Channel,scale)
-        self.SetPosition(Channel,position)
-
-        
-        return
 
 #Exemple de gestion de l'oscillo
 # from contextlib import closing
